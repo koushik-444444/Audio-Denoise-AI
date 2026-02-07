@@ -1,0 +1,9 @@
+frontend/
+node_modules/
+.git/
+.env
+__pycache__/
+*.pyc
+temp_audio/
+# Exclude model from git push if using CLI, but keep for local docker
+# model/unet_denoiser.h5

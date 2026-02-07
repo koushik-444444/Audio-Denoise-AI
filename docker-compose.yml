@@ -1,0 +1,98 @@
+# AudioDenoise AI - Docker Compose Configuration
+# For local development and testing
+
+version: '3.8'
+
+services:
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: audio-denoise-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/model
+      - REDIS_URL=redis://redis:6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./model:/app/model:ro
+      - audio-temp:/tmp/audio_denoise
+    depends_on:
+      - redis
+    networks:
+      - audio-denoise-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching and task queue
+  redis:
+    image: redis:7-alpine
+    container_name: audio-denoise-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - audio-denoise-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Celery Worker (for async processing)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: audio-denoise-worker
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - MODEL_PATH=/app/model
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./model:/app/model:ro
+      - audio-temp:/tmp/audio_denoise
+    depends_on:
+      - redis
+      - api
+    networks:
+      - audio-denoise-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Flower - Celery monitoring (optional)
+  flower:
+    image: mher/flower:2.0
+    container_name: audio-denoise-flower
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - FLOWER_PORT=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - audio-denoise-network
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  audio-temp:
+
+networks:
+  audio-denoise-network:
+    driver: bridge
