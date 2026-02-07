@@ -1,14 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import WaveSurfer from 'wavesurfer.js'
+import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js'
 import { Play, Pause } from 'lucide-react'
 
 interface AudioWaveformProps {
   url: string
   label: string
   color?: string
+  enableTrimming?: boolean
+  onRegionChange?: (start: number, end: number) => void
 }
 
-export default function AudioWaveform({ url, label, color = '#22d3ee' }: AudioWaveformProps) {
+export default function AudioWaveform({ 
+  url, 
+  label, 
+  color = '#22d3ee',
+  enableTrimming = false,
+  onRegionChange
+}: AudioWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wavesurferRef = useRef<WaveSurfer | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -30,10 +39,22 @@ export default function AudioWaveform({ url, label, color = '#22d3ee' }: AudioWa
       hideScrollbar: true,
     })
 
+    const regions = ws.registerPlugin(RegionsPlugin.create())
+
     ws.load(url)
 
     ws.on('ready', () => {
       setDuration(ws.getDuration())
+      
+      if (enableTrimming) {
+        regions.addRegion({
+          start: 0,
+          end: ws.getDuration(),
+          color: `${color}33`,
+          drag: true,
+          resize: true,
+        })
+      }
     })
 
     ws.on('audioprocess', () => {
@@ -44,12 +65,20 @@ export default function AudioWaveform({ url, label, color = '#22d3ee' }: AudioWa
     ws.on('pause', () => setIsPlaying(false))
     ws.on('finish', () => setIsPlaying(false))
 
+    // Note: RegionsPlugin events are a bit different in v7
+    // We listen to region-updated on the plugin instance
+    regions.on('region-updated', (region) => {
+      if (onRegionChange) {
+        onRegionChange(region.start, region.end)
+      }
+    })
+
     wavesurferRef.current = ws
 
     return () => {
       ws.destroy()
     }
-  }, [url, color])
+  }, [url, color, enableTrimming, onRegionChange])
 
   const togglePlay = () => {
     if (wavesurferRef.current) {

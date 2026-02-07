@@ -27,9 +27,11 @@ export interface JobStatus {
 }
 
 export const api = {
-  async uploadAudio(file: File): Promise<DenoiseResponse> {
+  async uploadAudio(file: File, startTime?: number, endTime?: number): Promise<DenoiseResponse> {
     const formData = new FormData();
     formData.append('file', file);
+    if (startTime !== undefined) formData.append('start_time', startTime.toString());
+    if (endTime !== undefined) formData.append('end_time', endTime.toString());
     
     const response = await axios.post(`${API_BASE_URL}/api/denoise`, formData, {
       headers: {

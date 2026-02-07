@@ -153,6 +153,17 @@ class DenoiseService:
         
         # Save output
         update_progress(95.0, "Exporting results...")
+        
+        # Apply Peak Normalization to -1dB
+        try:
+            peak = np.max(np.abs(audio_denoised))
+            if peak > 0:
+                target_peak = 10**(-1/20) # -1dB
+                audio_denoised = audio_denoised * (target_peak / peak)
+            logger.info("Applied -1dB peak normalization")
+        except Exception as e:
+            logger.warning(f"Normalization failed: {e}")
+
         sf.write(output_path, audio_denoised, 16000)
         logger.info(f"Saved output to {output_path}")
         
